@@ -1,7 +1,7 @@
 # SeRab Code Sample
 
-SeRab 운영 서비스에서 핵심 구현 일부만 발췌한 공개 코드 샘플입니다.
-운영 중인 서비스의 전체 소스는 private로 관리하고 있으며, 공개 가능한 핵심 구현 일부만 별도 샘플로 정리했습니다.
+SeRab 운영 서비스에서 핵심 구현 일부를 발췌한 코드 샘플입니다.
+운영 중인 서비스의 전체 소스는 private로 관리하고 있으며, 주요 구현 흐름을 확인할 수 있도록 일부 코드를 별도 샘플로 정리했습니다.
 
 - Docs: https://github.com/jurio5/serab-docs
 - Service: https://www.serab.dev

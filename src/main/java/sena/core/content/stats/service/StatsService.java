@@ -30,12 +30,13 @@ public class StatsService {
 
         private static final int DEFAULT_PAGE_SIZE = 20;
         private static final int DETAIL_RESULT_LIMIT = 5;
-        private static final int DEFENSE_RANKING_LIMIT = 5;
+
 
         private final MatchupStatRepository statRepository;
         private final BattleRecordRepository battleRecordRepository;
         private final MatchupSkillStatRepository skillStatRepository;
         private final MatchupCommentRepository commentRepository;
+        private final DefenseRankingCalculator defenseRankingCalculator;
 
         @Transactional(readOnly = true)
         public SliceResponse<DefenseComboResponse> searchDefenseCombos(String hero, int page) {
@@ -85,51 +86,7 @@ public class StatsService {
         @Transactional(readOnly = true)
         public List<DefenseRankingResponse> computeDefenseRanking() {
                 Slice<DefenseComboResponse> allCombos = statRepository.findDefenseCombos(null, PageRequest.of(0, 200));
-                Map<String, ComboAggregationPayload> comboMap = aggregateComboStats(allCombos.getContent());
-                List<String> topHeroes = rankCoreHeroes(comboMap);
-                return topHeroes.stream()
-                        .map(hero -> buildRankingResponse(hero, comboMap))
-                        .toList();
-        }
-
-        private Map<String, ComboAggregationPayload> aggregateComboStats(List<DefenseComboResponse> combos) {
-                return combos.stream()
-                        .collect(Collectors.groupingBy(
-                                DefenseComboResponse::defenseCombo,
-                                Collectors.reducing(
-                                        ComboAggregationPayload.ZERO,
-                                        c -> new ComboAggregationPayload(c.totalGames(), c.totalWins()),
-                                        ComboAggregationPayload::merge
-                                )
-                        ));
-        }
-
-        private List<String> rankCoreHeroes(Map<String, ComboAggregationPayload> comboMap) {
-                Map<String, Long> heroTotalGames = new HashMap<>();
-                comboMap.forEach((combo, agg) -> {
-                        for (String hero : combo.split(",")) {
-                                heroTotalGames.merge(hero.trim(), agg.totalGames(), Long::sum);
-                        }
-                });
-                return heroTotalGames.entrySet().stream()
-                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                        .limit(DEFENSE_RANKING_LIMIT)
-                        .map(Map.Entry::getKey)
-                        .toList();
-        }
-
-        private DefenseRankingResponse buildRankingResponse(String coreHero, Map<String, ComboAggregationPayload> comboMap) {
-                List<ComboDetailResponse> details = comboMap.entrySet().stream()
-                        .filter(e -> Arrays.asList(e.getKey().split(",")).contains(coreHero))
-                        .sorted((a, b) -> Long.compare(b.getValue().totalGames(), a.getValue().totalGames()))
-                        .map(e -> new ComboDetailResponse(e.getKey(), e.getValue().totalGames(), e.getValue().wins(), e.getValue().defenseSuccessRate()))
-                        .toList();
-
-                long totalGames = details.stream().mapToLong(ComboDetailResponse::totalGames).sum();
-                long totalWins = details.stream().mapToLong(ComboDetailResponse::wins).sum();
-                double winRate = totalGames > 0 ? (double) (totalGames - totalWins) / totalGames * 100.0 : 0;
-
-                return new DefenseRankingResponse(coreHero, totalGames, totalWins, winRate, details);
+                return defenseRankingCalculator.calculate(allCombos.getContent());
         }
 
         private List<String> parseHeroes(String hero) {

@@ -42,8 +42,8 @@ class StatsServiceSkillAggregationTest {
     @Test
     void getAttackSkillStats_AggregatesSameAttackOrder() {
         MatchupStat stat = createStat();
-        MatchupSkillStat first = createSkillStat(stat, "카일1,카일2,여포1", "여포1,카일2,여포2", true);
-        MatchupSkillStat second = createSkillStat(stat, "카일2,여포1,여포2", "여포1,카일2,여포2", false);
+        MatchupSkillStat first = createSkillStat(stat, "카일1,카일2,여포1", "여포3,카일2,여포2", true);
+        MatchupSkillStat second = createSkillStat(stat, "카일2,여포1,여포2", "여포3,카일2,여포2", false);
         MatchupSkillStat third = createSkillStat(stat, "카일1,카일2,여포1", "카구라2,카일2,카일1", true);
 
         given(statRepository.findById(1L)).willReturn(Optional.of(stat));
@@ -53,7 +53,7 @@ class StatsServiceSkillAggregationTest {
 
         assertEquals(2, result.size());
         assertNull(result.getFirst().defenseSkillOrder());
-        assertEquals("여포1,카일2,여포2", result.getFirst().attackSkillOrder());
+        assertEquals("여포3,카일2,여포2", result.getFirst().attackSkillOrder());
         assertEquals(1, result.getFirst().wins());
         assertEquals(1, result.getFirst().losses());
         assertEquals(2, result.getFirst().totalGames());

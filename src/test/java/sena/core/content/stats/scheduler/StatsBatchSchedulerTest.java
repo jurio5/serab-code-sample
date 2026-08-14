@@ -14,11 +14,14 @@ import sena.core.content.room.repository.BattleRecordRepository;
 import sena.core.content.stats.cache.ContributorRankingCache;
 import sena.core.content.stats.cache.DefenseRankingCache;
 import sena.core.content.stats.domain.MatchupStat;
+import sena.core.content.stats.dto.RegisteredNames;
 import sena.core.content.stats.repository.MatchupStatRepository;
+import sena.core.content.stats.service.UnregisteredHeroLogService;
 import sena.core.global.scheduler.SchedulerStatusTracker;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
@@ -42,6 +45,9 @@ class StatsBatchSchedulerTest {
     @Mock
     ContributorRankingCache contributorRankingCacheService;
 
+    @Mock
+    UnregisteredHeroLogService unregisteredHeroLogService;
+
     @InjectMocks
     StatsBatchScheduler scheduler;
 
@@ -50,9 +56,10 @@ class StatsBatchSchedulerTest {
     void aggregateMatchupStats_success() {
         // given
         BattleRecord record = createMockRecord("A,B,C", "펫1", "X,Y,Z", "펫2", BattleResult.WIN);
-
         given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
                 .willReturn(List.of(record));
+        given(unregisteredHeroLogService.loadRegisteredNames())
+                .willReturn(new RegisteredNames(Set.of(), Set.of()));
 
         MatchupStat stat = mock(MatchupStat.class);
         given(matchupStatRepository.findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
@@ -89,9 +96,10 @@ class StatsBatchSchedulerTest {
     void aggregateMatchupStats_skipped() {
         // given
         BattleRecord record = createMockRecord("", "펫1", "X,Y,Z", "펫2", BattleResult.WIN);
-
         given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
                 .willReturn(List.of(record));
+        given(unregisteredHeroLogService.loadRegisteredNames())
+                .willReturn(new RegisteredNames(Set.of(), Set.of()));
 
         // when
         scheduler.aggregateMatchupStats();
@@ -107,9 +115,10 @@ class StatsBatchSchedulerTest {
     void aggregateMatchupStats_createNewStat() {
         // given
         BattleRecord record = createMockRecord("A,B,C", "펫1", "X,Y,Z", "펫2", BattleResult.LOSE);
-
         given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
                 .willReturn(List.of(record));
+        given(unregisteredHeroLogService.loadRegisteredNames())
+                .willReturn(new RegisteredNames(Set.of(), Set.of()));
 
         MatchupStat newStat = mock(MatchupStat.class);
         given(matchupStatRepository.findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
@@ -144,6 +153,8 @@ class StatsBatchSchedulerTest {
 
         given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
                 .willReturn(List.of(failRecord, successRecord));
+        given(unregisteredHeroLogService.loadRegisteredNames())
+                .willReturn(new RegisteredNames(Set.of(), Set.of()));
 
         given(matchupStatRepository.findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
                 "A,B,C", "펫1", "X,Y,Z", "펫2"))
@@ -161,6 +172,58 @@ class StatsBatchSchedulerTest {
         verify(stat).addResult(false);
         verify(successRecord).markAsActive();
         verify(tracker).recordSuccess(eq("stats-batch"), contains("1/2"));
+    }
+
+    @Test
+    @DisplayName("미등록 영웅이 감지되면 메시지에 포함")
+    void aggregateMatchupStats_detectsUnregisteredHeroes() {
+        // given
+        BattleRecord record = createMockRecord("A,B,C", "펫1", "X,Y,Z", "펫2", BattleResult.WIN);
+
+        given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
+                .willReturn(List.of(record));
+
+        RegisteredNames names = new RegisteredNames(Set.of(), Set.of());
+        given(unregisteredHeroLogService.loadRegisteredNames()).willReturn(names);
+        given(unregisteredHeroLogService.detect(record, names)).willReturn(3);
+
+        MatchupStat stat = mock(MatchupStat.class);
+        given(matchupStatRepository.findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
+                any(), any(), any(), any()))
+                .willReturn(Optional.of(stat));
+
+        // when
+        scheduler.aggregateMatchupStats();
+
+        // then
+        verify(unregisteredHeroLogService).detect(record, names);
+        verify(record).markAsActive();
+        verify(tracker).recordSuccess(eq("stats-batch"), contains("미등록"));
+    }
+
+    @Test
+    @DisplayName("모두 등록된 영웅/펫이면 미등록 메시지 없음")
+    void aggregateMatchupStats_noUnregisteredLog() {
+        // given
+        BattleRecord record = createMockRecord("A,B,C", "펫1", "X,Y,Z", "펫2", BattleResult.WIN);
+
+        given(battleRecordRepository.findByStatus(BattleRecordStatus.PENDING))
+                .willReturn(List.of(record));
+
+        RegisteredNames names = new RegisteredNames(Set.of(), Set.of());
+        given(unregisteredHeroLogService.loadRegisteredNames()).willReturn(names);
+        given(unregisteredHeroLogService.detect(record, names)).willReturn(0);
+
+        MatchupStat stat = mock(MatchupStat.class);
+        given(matchupStatRepository.findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
+                any(), any(), any(), any()))
+                .willReturn(Optional.of(stat));
+
+        // when
+        scheduler.aggregateMatchupStats();
+
+        // then
+        verify(tracker).recordSuccess(eq("stats-batch"), contains("1/1"));
     }
 
     private BattleRecord createMockRecord(String defenseCombo, String defensePet,

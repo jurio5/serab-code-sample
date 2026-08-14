@@ -10,12 +10,14 @@ import org.springframework.transaction.annotation.Transactional;
 import sena.core.content.room.domain.BattleRecord;
 import sena.core.content.room.enums.BattleRecordStatus;
 import sena.core.content.room.repository.BattleRecordRepository;
-import sena.core.content.stats.cache.DefenseRankingCache;
 import sena.core.content.stats.cache.ContributorRankingCache;
-import sena.core.content.stats.domain.MatchupStat;
+import sena.core.content.stats.cache.DefenseRankingCache;
 import sena.core.content.stats.domain.MatchupSkillStat;
-import sena.core.content.stats.repository.MatchupStatRepository;
+import sena.core.content.stats.domain.MatchupStat;
+import sena.core.content.stats.dto.RegisteredNames;
 import sena.core.content.stats.repository.MatchupSkillStatRepository;
+import sena.core.content.stats.repository.MatchupStatRepository;
+import sena.core.content.stats.service.UnregisteredHeroLogService;
 import sena.core.global.scheduler.SchedulerStatusTracker;
 
 import java.util.List;
@@ -34,6 +36,7 @@ public class StatsBatchScheduler {
     private final SchedulerStatusTracker tracker;
     private final DefenseRankingCache defenseRankingCache;
     private final ContributorRankingCache contributorRankingCache;
+    private final UnregisteredHeroLogService unregisteredHeroLogService;
 
     @PostConstruct
     void init() {
@@ -55,7 +58,10 @@ public class StatsBatchScheduler {
                 return;
             }
 
+            RegisteredNames registeredNames = unregisteredHeroLogService.loadRegisteredNames();
+
             int processed = 0;
+            int unregisteredCount = 0;
 
             for (BattleRecord record : pendingRecords) {
                 try {
@@ -69,6 +75,8 @@ public class StatsBatchScheduler {
                         log.warn("Skipped battle record id={}: incomplete combo data", record.getId());
                         continue;
                     }
+
+                    unregisteredCount += unregisteredHeroLogService.detect(record, registeredNames);
 
                     MatchupStat stat = matchupStatRepository
                             .findByDefenseComboAndDefensePetAndAttackComboAndAttackPet(
@@ -95,8 +103,10 @@ public class StatsBatchScheduler {
                 }
             }
 
-            String message = processed + "/" + pendingRecords.size() + "건 처리";
-            log.info("Stats batch completed: {}/{} records processed", processed, pendingRecords.size());
+            String message = processed + "/" + pendingRecords.size() + "건 처리"
+                    + (unregisteredCount > 0 ? ", 미등록 " + unregisteredCount + "건 감지" : "");
+            log.info("Stats batch completed: {}/{} records processed, {} unregistered detected",
+                    processed, pendingRecords.size(), unregisteredCount);
             tracker.recordSuccess(NAME, message);
             defenseRankingCache.refresh();
             contributorRankingCache.refresh();

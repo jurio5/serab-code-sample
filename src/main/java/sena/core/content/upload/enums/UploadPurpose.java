@@ -1,0 +1,14 @@
+package sena.core.content.upload.enums;
+
+public enum UploadPurpose {
+    COMMUNITY_POST_IMAGE,
+    COMMUNITY_POST_VIDEO,
+    NOTICE_IMAGE,
+    INQUIRY_IMAGE,
+    RANK_VERIFICATION_IMAGE,
+    HERO_IMAGE,
+    HERO_AWAKENING_SKILL_IMAGE,
+    HERO_SKILL_ONE_IMAGE,
+    HERO_SKILL_TWO_IMAGE,
+    PET_IMAGE
+}
